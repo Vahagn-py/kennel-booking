@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1c3329">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Kennel Booking</title>
+  <meta name="description" content="Standalone staff booking tool. Local only.">
+  <meta name="robots" content="noindex,nofollow">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,560;1,9..144,500&family=Manrope:wght@400;500;600;700&family=Noto+Sans+Armenian:wght@400;500;600;700&family=Noto+Serif+Armenian:wght@500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/booking.css?v=booking1">
+  <script>
+    document.documentElement.classList.add("js");
+    try {
+      var l = localStorage.getItem("zh-lang") || "ru";
+      if (l !== "ru") document.documentElement.classList.add("i18n-pending");
+      document.documentElement.lang = (l === "hy" || l === "en") ? l : "ru";
+    } catch (e) {}
+  </script>
+</head>
+<body data-page="reserve" data-staff-only="1" class="mode-public">
+  <a class="skip" href="#main" data-i18n="skip">К содержанию</a>
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="logo" href="index.html">
+        <span><span class="logo-name">Kennel Booking</span><span class="logo-place" data-i18n="bk.adminEyebrow">Внутренний инструмент</span></span>
+      </a>
+      <div class="header-tools">
+        <div class="langs" role="group" aria-label="Language">
+          <button type="button" data-lang="hy">ՀԱՅ</button>
+          <button type="button" data-lang="ru" class="is-active">РУС</button>
+          <button type="button" data-lang="en">ENG</button>
+        </div>
+        <button type="button" class="btn btn-line btn-sm staff-logout" id="staffLogoutBtn" data-admin-only data-i18n="bk.logout">Выйти</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main" class="booking-page">
+    <header class="page-hero booking-hero">
+      <div class="wrap booking-hero-row">
+        <div>
+          <p class="eyebrow" data-i18n="bk.adminEyebrow">Внутренний инструмент</p>
+          <h1 data-i18n="bk.adminTitle">Умная бронь</h1>
+        </div>
+      </div>
+    </header>
+
+    <div class="wrap booking-layout">
+      <div class="booking-panel">
+        <section class="booking-section compact" id="sizeSection">
+          <div class="section-head-row">
+            <h2 data-i18n="bk.size">Размер</h2>
+            <p class="booking-hint inline" data-i18n="bk.sizeHint">Маленькая → S. Большая/гигант → L. Средняя → S и L.</p>
+          </div>
+          <div class="size-grid" id="sizeGrid"></div>
+          <p class="field-error hidden" id="errSize" data-err-for="size"></p>
+        </section>
+
+        <section class="booking-section compact" id="datesSection">
+          <div class="section-head-row">
+            <h2 data-i18n="bk.dates">Даты</h2>
+            <button type="button" class="btn btn-line btn-sm" id="findNearest" data-i18n="bk.nearest">Ближайшее окно</button>
+          </div>
+          <div class="dates-dmy-grid">
+            <div class="field" data-field="dateIn">
+              <label data-i18n="bk.checkin">Заезд</label>
+              <div class="dmy-row">
+                <select id="inDay" aria-label="День"></select>
+                <select id="inMonth" aria-label="Месяц"></select>
+                <select id="inYear" aria-label="Год"></select>
+              </div>
+              <input id="dateIn" type="hidden">
+            </div>
+            <div class="field" data-field="nights">
+              <label for="nights" data-i18n="bk.nights">Суток</label>
+              <input id="nights" type="number" min="1" inputmode="numeric" pattern="[0-9]*" value="1">
+            </div>
+            <div class="field" data-field="dateOut">
+              <label data-i18n="bk.checkout">Выезд</label>
+              <div class="dmy-row">
+                <select id="outDay" aria-label="День"></select>
+                <select id="outMonth" aria-label="Месяц"></select>
+                <select id="outYear" aria-label="Год"></select>
+              </div>
+              <input id="dateOut" type="hidden">
+            </div>
+          </div>
+          <p class="field-error hidden" id="errDates" data-err-for="dates"></p>
+          <div id="availMsg" class="alert alert-warn hidden"></div>
+          <div id="publicAvail" class="alert alert-ok hidden" hidden aria-hidden="true"></div>
+          <div id="suggestWrap" class="hidden">
+            <div class="suggest-list" id="suggestList"></div>
+          </div>
+        </section>
+
+        <section class="booking-section compact" id="kennelSection">
+          <div class="section-head-row">
+            <h2 data-i18n="bk.kennel">Вольер</h2>
+            <button type="button" class="btn btn-line btn-sm" id="openKennelCalBtn" data-i18n="bk.kennelCal">Календарь выбранного</button>
+          </div>
+          <div class="kennel-grid" id="kennelGrid"></div>
+          <p class="field-error hidden" id="errKennel" data-err-for="kennel"></p>
+          <div class="kennel-cal-mini" id="kennelCalMini">
+            <p class="booking-hint" data-i18n="bk.kennelPickHint">Выберите вольер — здесь появится календарь занятости.</p>
+          </div>
+        </section>
+
+        <section class="booking-section compact" id="guestSection">
+          <h2 data-i18n="bk.guest">Гость</h2>
+          <div class="field-grid">
+            <div class="field" data-field="petName">
+              <label for="petName" data-i18n="bk.petName">Кличка</label>
+              <input id="petName" type="text" data-i18n-placeholder="bk.phPet" placeholder="Рекс">
+            </div>
+            <div class="field" data-field="breed">
+              <label for="breed"><span data-i18n="bk.breed">Порода</span></label>
+              <input id="breed" type="text" data-i18n-placeholder="bk.phBreed" placeholder="Лабрадор">
+            </div>
+            <div class="field" data-field="weight">
+              <label for="weight"><span data-i18n="bk.weight">Вес, кг</span></label>
+              <input id="weight" type="text" inputmode="decimal" placeholder="28">
+            </div>
+            <div class="field" data-field="petAge">
+              <label data-i18n="bk.age">Возраст</label>
+              <div class="dmy-row age-row">
+                <input id="petAgeYears" type="number" min="0" max="30" inputmode="numeric" data-i18n-placeholder="bk.phYears" placeholder="лет">
+                <input id="petAgeMonths" type="number" min="0" max="11" inputmode="numeric" data-i18n-placeholder="bk.phMonths" placeholder="мес.">
+              </div>
+            </div>
+            <div class="field" data-field="ownerName">
+              <label for="ownerName" data-i18n="bk.ownerName">Хозяин</label>
+              <input id="ownerName" type="text" data-i18n-placeholder="bk.phOwner" placeholder="Имя">
+            </div>
+            <div class="field full" data-field="ownerPhone">
+              <label for="ownerPhone" data-i18n="bk.phone">Телефон</label>
+              <input id="ownerPhone" type="tel" inputmode="tel" data-i18n-placeholder="bk.phPhone" placeholder="+374 XX XXX XXX" autocomplete="tel">
+            </div>
+          </div>
+          <p class="field-error hidden" id="errGuest" data-err-for="guest"></p>
+        </section>
+
+        <section class="booking-section compact">
+          <h2 data-i18n="bk.extras">Доплаты и услуги</h2>
+          <div class="check-grid">
+            <label class="check-item"><input id="aggressive" type="checkbox"><span><strong data-i18n="bk.aggression">Агрессия</strong><span id="aggrFeeLabel">+1000 ֏/сут.</span></span></label>
+            <label class="check-item"><input id="grooming" type="checkbox"><span><strong data-i18n="bk.grooming">Груминг</strong></span></label>
+            <label class="check-item"><input id="cameraShown" type="checkbox"><span><strong data-i18n="bk.camera">Камера показана</strong></span></label>
+            <label class="check-item"><input id="depositPaid" type="checkbox"><span><strong data-i18n="bk.depositPaid">Предоплата 10 000 ֏ получена</strong><span data-i18n="bk.depositHint">не возвращается при неявке</span></span></label>
+          </div>
+
+          <h3 class="subhead" data-i18n="bk.foodChoose">Корм</h3>
+          <div class="option-grid" id="adminFoodOptions"></div>
+
+          <div class="section-head-row" style="margin-top:14px">
+            <h3 class="subhead" data-i18n="bk.vetLog">Вызовы ветврача</h3>
+            <button type="button" class="btn btn-line btn-sm" id="addVetVisitBtn" data-i18n="bk.addVet">Добавить вызов</button>
+          </div>
+          <div id="vetVisitsList" class="service-list"></div>
+
+          <div class="field" style="margin-top:12px">
+            <label for="notes" data-i18n="bk.notes">Заметки</label>
+            <textarea id="notes" rows="2" data-i18n-placeholder="bk.phNotes" placeholder="Характер, рейс…"></textarea>
+          </div>
+          <div class="field" style="margin-top:10px" id="adminPhotoWrap">
+            <label data-i18n="bk.petPhoto">Фото собаки</label>
+            <div class="photo-pick-row">
+              <button type="button" class="btn btn-line btn-sm" id="petPhotoGalleryBtn" data-i18n="bk.photoGallery">Из галереи</button>
+              <button type="button" class="btn btn-line btn-sm" id="petPhotoCameraBtn" data-i18n="bk.photoCamera">Камера</button>
+            </div>
+            <input id="petPhoto" type="file" accept="image/*" class="hidden" tabindex="-1">
+            <input id="petPhotoCamera" type="file" accept="image/*" capture="environment" class="hidden" tabindex="-1">
+            <div class="photo-preview muted" id="petPhotoPreview" data-i18n="bk.noPhoto">Нет фото</div>
+            <div class="photo-preview muted hidden" id="adminPhotoPreview"></div>
+          </div>
+        </section>
+
+        <details class="booking-section compact settings-details">
+          <summary data-i18n="bk.prices">Цены, корма и скидка</summary>
+          <div class="settings-grid">
+            <div class="field"><label for="priceSmall" data-i18n="bk.priceSmall">Маленькая</label><input id="priceSmall" type="number" min="0"></div>
+            <div class="field"><label for="priceMedium" data-i18n="bk.priceMedium">Средняя</label><input id="priceMedium" type="number" min="0"></div>
+            <div class="field"><label for="priceLarge" data-i18n="bk.priceLarge">Большая</label><input id="priceLarge" type="number" min="0"></div>
+            <div class="field"><label for="priceGiant" data-i18n="bk.priceGiant">Гигант</label><input id="priceGiant" type="number" min="0"></div>
+            <div class="field"><label for="aggressionFeeSmall" data-i18n="bk.aggressionFeeSmall">Агрессия S/M</label><input id="aggressionFeeSmall" type="number" min="0"></div>
+            <div class="field"><label for="aggressionFeeLarge" data-i18n="bk.aggressionFeeLarge">Агрессия L/гигант</label><input id="aggressionFeeLarge" type="number" min="0"></div>
+            <div class="field"><label for="vetCallFee" data-i18n="bk.vetCallFee">Вызов ветврача (база)</label><input id="vetCallFee" type="number" min="0"></div>
+            <div class="field"><label for="depositAmount" data-i18n="bk.depositAmount">Предоплата</label><input id="depositAmount" type="number" min="0"></div>
+            <div class="field"><label for="discountDays" data-i18n="bk.discountDays">Скидка с N-го дня</label><input id="discountDays" type="number" min="1"></div>
+            <div class="field"><label for="discountPerDay" data-i18n="bk.discountPerDay">Скидка ֏ / сут.</label><input id="discountPerDay" type="number" min="0"></div>
+          </div>
+          <h3 class="subhead" data-i18n="bk.foodCatalog">Каталог кормов</h3>
+          <div id="foodCatalogEditor" class="food-catalog"></div>
+          <div class="actions-row">
+            <button type="button" class="btn btn-line btn-sm" id="addFoodOption" data-i18n="bk.addFood">Добавить корм</button>
+            <button type="button" class="btn btn-line btn-sm" id="saveSettings" data-i18n="bk.savePrices">Сохранить цены</button>
+          </div>
+        </details>
+      </div>
+
+      <aside class="booking-side">
+        <div class="price-box" id="priceBox">
+          <h3 data-i18n="bk.total">Итог</h3>
+          <p data-i18n="bk.pickSizeDates">Выберите размер и даты.</p>
+        </div>
+        <div class="share-actions hidden" id="shareActions">
+          <button type="button" class="btn btn-line btn-sm" id="printBookingBtn" data-i18n="bk.print">Печать</button>
+          <button type="button" class="btn btn-line btn-sm" id="downloadBookingBtn" data-i18n="bk.downloadDoc">Скачать</button>
+          <button type="button" class="btn btn-line btn-sm" id="shareBookingBtn" data-i18n="bk.share">Поделиться</button>
+        </div>
+        <div id="formMsg" class="alert alert-warn hidden"></div>
+
+        <div class="side-block">
+          <div class="section-head-row">
+            <h2>
+              <span data-i18n="bk.bookings">Брони</span>
+              <span class="req-badge hidden" id="requestBadge" aria-hidden="true">0</span>
+            </h2>
+          </div>
+          <div class="side-top-actions">
+            <button type="button" class="btn btn-line btn-sm notif-text-btn" id="notifBtn" data-i18n-aria="bk.notifications" aria-label="Оповещения">
+              <span data-i18n="bk.notifications">Оповещения</span>
+              <span class="req-badge notif-count hidden" id="notifCount">0</span>
+            </button>
+            <button type="button" class="btn btn-line btn-sm" id="openBoardBtn" data-i18n="bk.occupancy">Занятость вольеров</button>
+          </div>
+          <div id="requestInbox" class="request-inbox hidden"></div>
+          <div class="list-tools">
+            <input id="bookingSearch" type="search" data-i18n-placeholder="bk.searchPh" placeholder="Кличка, хозяин, телефон">
+            <select id="bookingStatusFilter" aria-label="Статус">
+              <option value="all" data-i18n="bk.filterAll">Все</option>
+              <option value="request" data-i18n="bk.filterRequest">Заявки</option>
+              <option value="in_progress" data-i18n="bk.filterInProgress">В процессе</option>
+              <option value="ready" data-i18n="bk.filterReady">Готово</option>
+              <option value="done" data-i18n="bk.filterDone">Сделано</option>
+              <option value="checkedin" data-i18n="bk.filterIn">Заселён</option>
+              <option value="pending" data-i18n="bk.filterPending">Ожидается</option>
+              <option value="checkedout" data-i18n="bk.filterOut">Выехал</option>
+            </select>
+          </div>
+          <div class="booking-list" id="bookingList"></div>
+
+          <div class="booking-backup">
+            <h3 class="subhead" data-i18n="bk.backup">Резервная копия</h3>
+            <div class="actions-row">
+              <button type="button" class="btn btn-line btn-sm" id="openHistoryBtn" data-i18n="bk.history">История</button>
+              <button type="button" class="btn btn-line btn-sm" id="exportBtn" data-i18n="bk.export">Скачать JSON</button>
+              <button type="button" class="btn btn-line btn-sm" id="importBtn" data-i18n="bk.import">Загрузить JSON</button>
+              <input id="importFile" type="file" accept="application/json,.json" class="hidden">
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <div class="booking-cta-bar">
+    <button type="button" class="btn save-sticky" id="saveBooking" data-i18n="bk.save">Сохранить бронь</button>
+  </div>
+
+  <dialog class="board-dialog" id="boardDialog">
+    <form method="dialog" class="board-dialog-inner">
+      <header class="board-head">
+        <div>
+          <p class="eyebrow" data-i18n="bk.schedule">Расписание</p>
+          <h2 id="boardTitle" data-i18n="bk.occupancy">Занятость вольеров</h2>
+        </div>
+        <button type="submit" class="btn btn-line btn-sm" value="close" data-i18n="bk.close">Закрыть</button>
+      </header>
+      <div class="board-toolbar">
+        <div class="field">
+          <label for="boardFilter" data-i18n="bk.kennels">Вольеры</label>
+          <select id="boardFilter">
+            <option value="all" data-i18n="bk.filterAll">Все</option>
+            <option value="small">Малые (S)</option>
+            <option value="large">Большие (L)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="boardView" data-i18n="bk.view">Вид</label>
+          <select id="boardView">
+            <option value="day" data-i18n="bk.viewDay">День</option>
+            <option value="month" selected data-i18n="bk.viewMonth">Месяц</option>
+            <option value="year" data-i18n="bk.viewYear">Год</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="boardPeriod" id="boardPeriodLabel" data-i18n="bk.viewMonth">Месяц</label>
+          <input id="boardPeriod" type="month">
+        </div>
+      </div>
+      <div class="board-legend">
+        <span><i class="leg free"></i> <span data-i18n="bk.free">свободно</span></span>
+        <span><i class="leg busy"></i> <span data-i18n="bk.busy">занято</span></span>
+        <span><i class="leg today"></i> <span data-i18n="bk.today">сегодня</span></span>
+        <span><i class="leg pick"></i> <span data-i18n="bk.picked">выбранные даты</span></span>
+      </div>
+      <div id="boardBody" class="board-body"></div>
+    </form>
+  </dialog>
+
+  <dialog class="pin-dialog" id="pinDialog">
+    <form method="dialog" class="pin-dialog-inner" id="pinForm">
+      <p class="eyebrow" data-i18n="bk.staffEnter">Вход для персонала</p>
+      <h2 data-i18n="bk.pinTitle">PIN администратора</h2>
+      <div class="field">
+        <label for="pinInput" data-i18n="bk.pinLabel">Код доступа</label>
+        <input id="pinInput" type="password" inputmode="numeric" autocomplete="current-password" maxlength="24">
+      </div>
+      <p class="field-error hidden" id="pinError"></p>
+      <div class="actions-row">
+        <button type="submit" class="btn" value="ok" data-i18n="bk.pinSubmit">Войти</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="board-dialog" id="notifDialog">
+    <form method="dialog" class="board-dialog-inner">
+      <header class="board-head">
+        <div>
+          <p class="eyebrow" data-i18n="bk.notifications">Оповещения</p>
+          <h2 data-i18n="bk.notifHistory">История заявок и напоминаний</h2>
+        </div>
+        <button type="submit" class="btn btn-line btn-sm" value="close" data-i18n="bk.close">Закрыть</button>
+      </header>
+      <div class="actions-row" style="margin:0">
+        <button type="button" class="btn btn-line btn-sm" id="markNotifRead" data-i18n="bk.markRead">Отметить прочитанным</button>
+        <button type="button" class="btn btn-line btn-sm" id="clearNotifsBtn" data-i18n="bk.clearNotifs">Удалить все оповещения</button>
+      </div>
+      <div id="notifList" class="notif-list"></div>
+    </form>
+  </dialog>
+
+  <dialog class="board-dialog" id="historyDialog">
+    <form method="dialog" class="board-dialog-inner">
+      <header class="board-head">
+        <div>
+          <p class="eyebrow" data-i18n="bk.backup">Резервная копия</p>
+          <h2 data-i18n="bk.historyTitle">История заявок и заселений</h2>
+        </div>
+        <button type="submit" class="btn btn-line btn-sm" value="close" data-i18n="bk.close">Закрыть</button>
+      </header>
+      <div class="list-tools" style="margin:0">
+        <input id="historySearch" type="search" data-i18n-placeholder="bk.searchPh" placeholder="Кличка, хозяин, телефон">
+        <select id="historyStatusFilter" aria-label="Статус">
+          <option value="all" data-i18n="bk.filterAll">Все</option>
+          <option value="request" data-i18n="bk.filterRequest">Заявки</option>
+          <option value="in_progress" data-i18n="bk.filterInProgress">В процессе</option>
+          <option value="ready" data-i18n="bk.filterReady">Готово</option>
+          <option value="done" data-i18n="bk.filterDone">Сделано</option>
+          <option value="pending" data-i18n="bk.filterPending">Ожидается</option>
+          <option value="checkedin" data-i18n="bk.filterIn">Заселён</option>
+          <option value="checkedout" data-i18n="bk.filterOut">Выехал</option>
+          <option value="cancelled" data-i18n="bk.statusCancel">отменён</option>
+          <option value="rejected" data-i18n="bk.statusRejected">отклонена</option>
+        </select>
+      </div>
+      <div id="historyList" class="booking-list history-list"></div>
+    </form>
+  </dialog>
+
+  <dialog class="pin-dialog" id="vetDialog">
+    <form method="dialog" class="pin-dialog-inner" id="vetForm">
+      <p class="eyebrow" data-i18n="bk.vetLog">Вызовы ветврача</p>
+      <h2 id="vetDialogTitle" data-i18n="bk.addVet">Добавить вызов</h2>
+      <input type="hidden" id="vetTargetBookingId">
+      <div class="field">
+        <label for="vetVisitDate" data-i18n="bk.vetDate">Дата</label>
+        <input id="vetVisitDate" type="text" inputmode="numeric" maxlength="10" placeholder="дд.мм.гггг">
+      </div>
+      <div class="field">
+        <label for="vetVisitType" data-i18n="bk.vetType">Тип</label>
+        <select id="vetVisitType">
+          <option value="exam" data-i18n="bk.vetExam">Осмотр</option>
+          <option value="injection" data-i18n="bk.vetInjection">Укол</option>
+          <option value="medicine" data-i18n="bk.vetMedicine">Лекарство</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vetServiceFee" data-i18n="bk.vetServiceFee">Цена услуги</label>
+        <input id="vetServiceFee" type="number" min="0" value="15000">
+      </div>
+      <div class="field hidden" id="vetMedicineFields">
+        <label for="vetMedicineName" data-i18n="bk.medicineName">Лекарство</label>
+        <input id="vetMedicineName" type="text" placeholder="Название">
+        <label for="vetMedicinePrice" style="margin-top:8px" data-i18n="bk.medicinePrice">Цена лекарства</label>
+        <input id="vetMedicinePrice" type="number" min="0" value="0">
+      </div>
+      <div class="field">
+        <label for="vetVisitNote" data-i18n="bk.notes">Заметки</label>
+        <input id="vetVisitNote" type="text">
+      </div>
+      <div class="actions-row" id="vetMainActions">
+        <button type="submit" class="btn" value="ok" data-i18n="bk.saveVisit">Сохранить</button>
+        <button type="submit" class="btn btn-line" value="cancel" data-i18n="bk.close">Закрыть</button>
+      </div>
+      <div class="dirty-confirm hidden" id="vetDirtyConfirm">
+        <p data-i18n="bk.dirtyAsk">Есть введённые данные. Закрыть окно?</p>
+        <div class="actions-row">
+          <button type="button" class="btn btn-line" id="vetDirtyDiscard" data-i18n="bk.dirtyDiscard">Удалить</button>
+          <button type="button" class="btn" id="vetDirtyKeep" data-i18n="bk.dirtyKeep">Продолжить</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="dirty-confirm-toast hidden" id="dirtyToast">
+    <p data-i18n="bk.dirtyAsk">Есть введённые данные. Закрыть окно?</p>
+    <div class="actions-row">
+      <button type="button" class="btn btn-line" id="dirtyToastDiscard" data-i18n="bk.dirtyDiscard">Удалить</button>
+      <button type="button" class="btn" id="dirtyToastKeep" data-i18n="bk.dirtyKeep">Продолжить</button>
+    </div>
+  </div>
+
+  <iframe id="printFrame" class="hidden" title="print"></iframe>
+
+  <footer class="site-footer">
+    <div class="wrap footer-bottom">
+      <p>© <span data-year>2026</span> Kennel Booking · <span data-i18n="bk.adminEyebrow">Внутренний инструмент</span></p>
+    </div>
+  </footer>
+
+  <script src="js/config.js"></script>
+  <script src="js/i18n.js?v=booking1"></script>
+  <script src="js/main.js"></script>
+  <script src="js/booking.js?v=booking1"></script>
+</body>
+</html>
