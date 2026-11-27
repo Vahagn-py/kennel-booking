@@ -4,16 +4,20 @@ Internal staff tool for dog-kennel reservations: kennels, dates, prices, check-i
 
 This folder is **independent from the public marketing website**. Copy only `booking/` to another machine or host.
 
+Staff creates bookings only — there is **no client request inbox** and no public «заявка» flow.
+
 ## What it is
 
 - Static HTML / CSS / JS (no backend, no database server)
 - Staff-only UI protected by a PIN (`js/config.js`)
+- Staff bookings with statuses: pending / checked-in / checked-out / cancelled
 - Data stored in the browser `localStorage` on that device
 - Languages: Armenian / Russian / English
 
 ## What it is not
 
 - Not a public booking form for clients
+- Not a client-request (заявка) inbox — staff creates and manages bookings only
 - Not connected to Azure, cloud inbox, or any third-party API
 - Not tied to a specific hotel brand or personal contact data
 

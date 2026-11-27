@@ -219,7 +219,6 @@
           <div class="section-head-row">
             <h2>
               <span data-i18n="bk.bookings">Брони</span>
-              <span class="req-badge hidden" id="requestBadge" aria-hidden="true">0</span>
             </h2>
           </div>
           <div class="side-top-actions">
@@ -229,18 +228,14 @@
             </button>
             <button type="button" class="btn btn-line btn-sm" id="openBoardBtn" data-i18n="bk.occupancy">Занятость вольеров</button>
           </div>
-          <div id="requestInbox" class="request-inbox hidden"></div>
           <div class="list-tools">
             <input id="bookingSearch" type="search" data-i18n-placeholder="bk.searchPh" placeholder="Кличка, хозяин, телефон">
             <select id="bookingStatusFilter" aria-label="Статус">
               <option value="all" data-i18n="bk.filterAll">Все</option>
-              <option value="request" data-i18n="bk.filterRequest">Заявки</option>
-              <option value="in_progress" data-i18n="bk.filterInProgress">В процессе</option>
-              <option value="ready" data-i18n="bk.filterReady">Готово</option>
-              <option value="done" data-i18n="bk.filterDone">Сделано</option>
-              <option value="checkedin" data-i18n="bk.filterIn">Заселён</option>
               <option value="pending" data-i18n="bk.filterPending">Ожидается</option>
+              <option value="checkedin" data-i18n="bk.filterIn">Заселён</option>
               <option value="checkedout" data-i18n="bk.filterOut">Выехал</option>
+              <option value="cancelled" data-i18n="bk.statusCancel">отменён</option>
             </select>
           </div>
           <div class="booking-list" id="bookingList"></div>
@@ -324,7 +319,7 @@
       <header class="board-head">
         <div>
           <p class="eyebrow" data-i18n="bk.notifications">Оповещения</p>
-          <h2 data-i18n="bk.notifHistory">История заявок и напоминаний</h2>
+          <h2 data-i18n="bk.notifHistory">История напоминаний</h2>
         </div>
         <button type="submit" class="btn btn-line btn-sm" value="close" data-i18n="bk.close">Закрыть</button>
       </header>
@@ -341,7 +336,7 @@
       <header class="board-head">
         <div>
           <p class="eyebrow" data-i18n="bk.backup">Резервная копия</p>
-          <h2 data-i18n="bk.historyTitle">История заявок и заселений</h2>
+          <h2 data-i18n="bk.historyTitle">История броней и заселений</h2>
         </div>
         <button type="submit" class="btn btn-line btn-sm" value="close" data-i18n="bk.close">Закрыть</button>
       </header>
@@ -349,15 +344,10 @@
         <input id="historySearch" type="search" data-i18n-placeholder="bk.searchPh" placeholder="Кличка, хозяин, телефон">
         <select id="historyStatusFilter" aria-label="Статус">
           <option value="all" data-i18n="bk.filterAll">Все</option>
-          <option value="request" data-i18n="bk.filterRequest">Заявки</option>
-          <option value="in_progress" data-i18n="bk.filterInProgress">В процессе</option>
-          <option value="ready" data-i18n="bk.filterReady">Готово</option>
-          <option value="done" data-i18n="bk.filterDone">Сделано</option>
           <option value="pending" data-i18n="bk.filterPending">Ожидается</option>
           <option value="checkedin" data-i18n="bk.filterIn">Заселён</option>
           <option value="checkedout" data-i18n="bk.filterOut">Выехал</option>
           <option value="cancelled" data-i18n="bk.statusCancel">отменён</option>
-          <option value="rejected" data-i18n="bk.statusRejected">отклонена</option>
         </select>
       </div>
       <div id="historyList" class="booking-list history-list"></div>

@@ -195,8 +195,22 @@
     return Number(state.settings.aggressionFeeSmall) || 1000;
   }
 
+  var LEGACY_REQUEST_STATUSES = {
+    request: 1,
+    in_progress: 1,
+    ready: 1,
+    done: 1,
+    rejected: 1
+  };
+
+  function isLegacyRequestStatus(status) {
+    return !!LEGACY_REQUEST_STATUSES[status];
+  }
+
   function loadState() {
-    state.bookings = loadJSON(STORAGE_KEY, []);
+    state.bookings = loadJSON(STORAGE_KEY, []).filter(function (b) {
+      return b && !isLegacyRequestStatus(b.status);
+    });
     state.settings = normalizeSettings(loadJSON(SETTINGS_KEY, {}));
     state.notifications = loadJSON(NOTIFY_KEY, []);
   }
@@ -330,84 +344,8 @@
 
   function activeBookings() {
     return state.bookings.filter(function (b) {
-      return b.status !== "cancelled" &&
-        b.status !== "request" &&
-        b.status !== "rejected" &&
-        b.status !== "in_progress" &&
-        b.status !== "ready" &&
-        b.status !== "done";
+      return b.status !== "cancelled" && !isLegacyRequestStatus(b.status);
     });
-  }
-
-  function isOpenRequest(b) {
-    return !!b && (
-      b.status === "request" ||
-      b.status === "in_progress" ||
-      b.status === "ready"
-    );
-  }
-
-  function newRequests() {
-    return state.bookings.filter(function (b) { return b.status === "request"; })
-      .slice()
-      .sort(function (a, b) {
-        return (a.createdAt < b.createdAt) ? 1 : (a.createdAt > b.createdAt) ? -1 : 0;
-      });
-  }
-
-  function openRequests() {
-    return state.bookings.filter(isOpenRequest)
-      .slice()
-      .sort(function (a, b) {
-        return (a.createdAt < b.createdAt) ? 1 : (a.createdAt > b.createdAt) ? -1 : 0;
-      });
-  }
-
-  function requestStatusSelectHtml(current) {
-    var opts = [
-      ["request", t("bk.statusRequest", "заявка")],
-      ["in_progress", t("bk.statusInProgress", "в процессе")],
-      ["ready", t("bk.statusReady", "готово")],
-      ["done", t("bk.statusDone", "сделано")],
-      ["rejected", t("bk.statusRejected", "отклонена")]
-    ];
-    return "<label class=\"req-status-wrap\"><span class=\"req-status-label\">" + t("bk.status", "Статус") + "</span>" +
-      "<select class=\"req-status-select\" data-req-status>" +
-      opts.map(function (o) {
-        return "<option value=\"" + o[0] + "\"" + (current === o[0] ? " selected" : "") + ">" + o[1] + "</option>";
-      }).join("") +
-      "</select></label>";
-  }
-
-  function setRequestStatus(req, status) {
-    if (!req || !status) return;
-    var prev = req.status;
-    if (prev === status) return;
-    if (status === "rejected" && !window.confirm(t("bk.confirmReject", "Отклонить эту заявку?"))) {
-      renderBookings();
-      renderNotifList();
-      return;
-    }
-    if (status === "done" && !window.confirm(t("bk.confirmDone", "Отметить заявку как сделано?"))) {
-      renderBookings();
-      renderNotifList();
-      return;
-    }
-    req.status = status;
-    req.statusUpdatedAt = new Date().toISOString();
-    if (status === "rejected" || status === "done") rememberDeletedId(req.id);
-    saveBookings();
-    pushNotification({
-      type: "status",
-      title: t("bk.statusChanged", "Статус заявки") + ": " + statusLabel(status),
-      body: (req.petName || "") + " · " + (req.ownerPhone || ""),
-      bookingId: req.id
-    });
-    renderBookings();
-    renderNotifList();
-    if ($("#historyDialog") && $("#historyDialog").open) renderHistoryList();
-    updateNotifUi();
-    formMessage(t("bk.statusChanged", "Статус заявки") + ": " + statusLabel(status), "ok");
   }
 
   function isKennelFree(kennelId, dateIn, dateOut, ignoreId) {
@@ -1076,12 +1014,12 @@
     var food = currentFoodSelection();
     if (!state.isAdmin) {
       if (!state.size || !dateIn || !dateOut || daysBetween(dateIn, dateOut) < 1) {
-        box.innerHTML = "<h3>" + t("bk.requestSummary", "Заявка") + "</h3><p>" + t("bk.pickSizeDates", "Выберите размер и даты.") + "</p>";
+        box.innerHTML = "<h3>" + t("bk.bookingSummary", "Бронь") + "</h3><p>" + t("bk.pickSizeDates", "Выберите размер и даты.") + "</p>";
         return;
       }
       var nightsPub = daysBetween(dateIn, dateOut);
       box.innerHTML =
-        "<h3>" + t("bk.requestSummary", "Заявка") + "</h3>" +
+        "<h3>" + t("bk.bookingSummary", "Бронь") + "</h3>" +
         "<div class=\"price-row\"><span>" + t("bk.size", "Размер") + "</span><span>" + sizeLabel(state.size) + "</span></div>" +
         "<div class=\"price-row\"><span>" + t("bk.nights", "Суток") + "</span><span>" + nightsPub + "</span></div>" +
         "<div class=\"price-row\"><span>" + t("bk.hotelFood", "Корм") + "</span><span>" + (food.name || t("bk.foodOwn", "Свой корм")) + "</span></div>" +
@@ -1207,29 +1145,22 @@
 
   function statusLabel(status) {
     return ({
-      request: t("bk.statusRequest", "заявка"),
-      in_progress: t("bk.statusInProgress", "в процессе"),
-      ready: t("bk.statusReady", "готово"),
-      done: t("bk.statusDone", "сделано"),
       pending: t("bk.statusPending", "ожидает"),
       checkedin: t("bk.statusIn", "заселён"),
       checkedout: t("bk.statusOut", "выехал"),
-      cancelled: t("bk.statusCancel", "отменён"),
-      rejected: t("bk.statusRejected", "отклонена")
+      cancelled: t("bk.statusCancel", "отменён")
     })[status] || status;
   }
 
-  function suggestedKennelsFor(req) {
-    if (!req || !req.size || !req.dateIn || !req.dateOut) return [];
-    return freeKennels(req.size, req.dateIn, req.dateOut);
+  function suggestedKennelsFor(booking) {
+    if (!booking || !booking.size || !booking.dateIn || !booking.dateOut) return [];
+    return freeKennels(booking.size, booking.dateIn, booking.dateOut);
   }
 
   function filteredBookingList() {
     var q = (state.listQuery || "").trim().toLowerCase();
     var status = state.listStatus || "all";
     return state.bookings.filter(function (b) {
-      if (status === "all" && isOpenRequest(b)) return false;
-      if (status === "all" && b.status === "done") return false;
       if (status !== "all" && b.status !== status) return false;
       if (!q) return true;
       var hay = [
@@ -1245,31 +1176,30 @@
     });
   }
 
-  function fillFormFromRequest(req) {
-    state.size = req.size;
-    applyDates(req.dateIn, req.dateOut);
-    $("#petName").value = req.petName || "";
-    if ($("#breed")) $("#breed").value = req.breed || "";
-    if ($("#weight")) $("#weight").value = req.weight || "";
-    if ($("#petAgeYears")) $("#petAgeYears").value = req.ageYears != null ? String(req.ageYears) : "";
-    if ($("#petAgeMonths")) $("#petAgeMonths").value = req.ageMonths != null ? String(req.ageMonths) : "";
-    $("#ownerName").value = req.ownerName || "";
-    $("#ownerPhone").value = req.ownerPhone || "";
-    $("#notes").value = req.notes || "";
-    if ($("#publicNotes")) $("#publicNotes").value = req.notes || "";
-    if ($("#aggressive")) $("#aggressive").checked = !!req.aggressive;
-    if ($("#grooming")) $("#grooming").checked = !!req.grooming;
-    if ($("#cameraShown")) $("#cameraShown").checked = !!req.cameraShown;
-    if ($("#depositPaid")) $("#depositPaid").checked = !!req.depositPaid;
-    state.foodOptionId = req.foodOptionId || "";
-    state.draftVetVisits = Array.isArray(req.vetVisits) ? req.vetVisits.slice() : [];
-    state.petPhotoData = req.petPhoto || "";
-    showAdminPhoto(req.petPhoto || "");
+  function fillFormFromBooking(booking) {
+    state.size = booking.size;
+    applyDates(booking.dateIn, booking.dateOut);
+    $("#petName").value = booking.petName || "";
+    if ($("#breed")) $("#breed").value = booking.breed || "";
+    if ($("#weight")) $("#weight").value = booking.weight || "";
+    if ($("#petAgeYears")) $("#petAgeYears").value = booking.ageYears != null ? String(booking.ageYears) : "";
+    if ($("#petAgeMonths")) $("#petAgeMonths").value = booking.ageMonths != null ? String(booking.ageMonths) : "";
+    $("#ownerName").value = booking.ownerName || "";
+    $("#ownerPhone").value = booking.ownerPhone || "";
+    $("#notes").value = booking.notes || "";
+    if ($("#aggressive")) $("#aggressive").checked = !!booking.aggressive;
+    if ($("#grooming")) $("#grooming").checked = !!booking.grooming;
+    if ($("#cameraShown")) $("#cameraShown").checked = !!booking.cameraShown;
+    if ($("#depositPaid")) $("#depositPaid").checked = !!booking.depositPaid;
+    state.foodOptionId = booking.foodOptionId || "";
+    state.draftVetVisits = Array.isArray(booking.vetVisits) ? booking.vetVisits.slice() : [];
+    state.petPhotoData = booking.petPhoto || "";
+    showAdminPhoto(booking.petPhoto || "");
     renderFoodOptions();
     renderDraftVetVisits();
-    var free = suggestedKennelsFor(req);
-    state.kennelId = free.length ? free[0].id : (req.kennelId || null);
-    var focus = parseISO(req.dateIn) || new Date();
+    var free = suggestedKennelsFor(booking);
+    state.kennelId = booking.kennelId || (free[0] && free[0].id) || null;
+    var focus = parseISO(booking.dateIn) || new Date();
     state.miniCalYear = focus.getFullYear();
     state.miniCalMonth = focus.getMonth();
     renderSizeCards();
@@ -1278,66 +1208,11 @@
     updatePrice();
     renderKennelMiniCal();
     formMessage(
-      t("bk.requestLoaded", "Заявка в форме") + ": " + (req.petName || "") +
-      (state.kennelId ? " · " + t("bk.suggestedKennel", "предложен вольер") + " " + state.kennelId : " · " + t("bk.noFreeShort", "свободных вольеров нет")),
+      t("bk.bookingLoaded", "Бронь в форме") + ": " + (booking.petName || "") +
+      (state.kennelId ? " · " + state.kennelId : ""),
       state.kennelId ? "ok" : "warn"
     );
     try { $("#petName").scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
-  }
-
-  function acceptRequestToKennel(req, kennelId, notifyClient) {
-    if (!kennelId) {
-      fillFormFromRequest(req);
-      return;
-    }
-    if (!isKennelFree(kennelId, req.dateIn, req.dateOut)) {
-      return formMessage(t("bk.errKennelBusy", "Этот вольер уже занят."), "error");
-    }
-    var price = calcPrice({
-      size: req.size,
-      dateIn: req.dateIn,
-      dateOut: req.dateOut,
-      foodPrice: Number(req.foodPrice) || 0,
-      foodName: req.foodName || "",
-      aggressive: false,
-      vetVisits: req.vetVisits || []
-    });
-    req.status = "pending";
-    req.kennelId = kennelId;
-    req.total = price.total;
-    req.priceBreakdown = price;
-    req.nights = price.nights;
-    req.acceptedAt = new Date().toISOString();
-    saveBookings();
-    pushNotification({
-      type: "approved",
-      title: t("bk.requestAccepted", "Заявка принята"),
-      body: (req.petName || "") + " → " + kennelId + " · " + formatDMY(req.dateIn) + "–" + formatDMY(req.dateOut),
-      bookingId: req.id
-    });
-    state.size = req.size;
-    state.kennelId = kennelId;
-    state.foodOptionId = req.foodOptionId || "";
-    state.draftVetVisits = Array.isArray(req.vetVisits) ? req.vetVisits.slice() : [];
-    state.petPhotoData = req.petPhoto || "";
-    state.lastSavedId = req.id;
-    applyDates(req.dateIn, req.dateOut);
-    showAdminPhoto(req.petPhoto || "");
-    renderSizeCards();
-    renderFoodOptions();
-    renderDraftVetVisits();
-    renderBookings();
-    updateAvailability();
-    updatePrice();
-    renderKennelMiniCal();
-    showShareActions(true);
-    formMessage(
-      t("bk.requestAccepted", "Заявка принята") + ": " + (req.petName || "") + " → " + kennelId + ", " + money(price.total) + ".",
-      "ok"
-    );
-    if (notifyClient !== false) {
-      openWhatsApp(req.ownerPhone, approvalMessage(req));
-    }
   }
 
   function deletedIdList() {
@@ -1349,34 +1224,6 @@
     var list = deletedIdList();
     if (list.indexOf(id) === -1) list.push(id);
     saveJSON(DELETED_KEY, list.slice(-500));
-  }
-
-  function rejectRequest(req) {
-    if (!window.confirm(t("bk.confirmReject", "Отклонить эту заявку?"))) return;
-    req.status = "rejected";
-    rememberDeletedId(req.id);
-    saveBookings();
-    pushNotification({
-      type: "rejected",
-      title: t("bk.requestRejected", "Заявка отклонена."),
-      body: (req.petName || "") + " · " + (req.ownerPhone || ""),
-      bookingId: req.id
-    });
-    renderBookings();
-    formMessage(t("bk.requestRejected", "Заявка отклонена."), "warn");
-  }
-
-  function deleteRequest(req) {
-    if (!req || !req.id) return;
-    if (!window.confirm(t("bk.confirmDeleteRequest", "Удалить эту заявку без восстановления?"))) return;
-    rememberDeletedId(req.id);
-    state.bookings = state.bookings.filter(function (b) { return b.id !== req.id; });
-    saveBookings();
-    renderBookings();
-    renderNotifList();
-    if ($("#historyDialog") && $("#historyDialog").open) renderHistoryList();
-    updateNotifUi();
-    formMessage(t("bk.requestDeleted", "Заявка удалена."), "ok");
   }
 
   function showAdminPhoto(dataUrl) {
@@ -1420,98 +1267,11 @@
     reader.readAsDataURL(file);
   }
 
-  function bindRequestCardActions(card, req, free) {
-    var statusSelect = card.querySelector("[data-req-status]");
-    if (statusSelect) {
-      statusSelect.addEventListener("change", function () {
-        setRequestStatus(req, statusSelect.value);
-      });
-    }
-    card.querySelectorAll("[data-req]").forEach(function (btn) {
-      btn.addEventListener("click", function () {
-        var act = btn.getAttribute("data-req");
-        if (act === "place") {
-          if (free.length) acceptRequestToKennel(req, free[0].id, true);
-          else fillFormFromRequest(req);
-        } else if (act === "form") {
-          fillFormFromRequest(req);
-        } else if (act === "wa") {
-          openWhatsApp(req.ownerPhone, t("bk.waAsk", "Здравствуйте! Это по вашей заявке на") + " " + (req.petName || "") + ".");
-        } else if (act === "reject") {
-          rejectRequest(req);
-        } else if (act === "delete") {
-          deleteRequest(req);
-        }
-      });
-    });
-  }
-
-  function renderRequestInbox() {
-    var inbox = $("#requestInbox");
-    if (!inbox || !state.isAdmin) return;
-    var list = openRequests();
-    updateNotifUi();
-    if (!list.length) {
-      inbox.classList.add("hidden");
-      inbox.innerHTML = "";
-      return;
-    }
-    inbox.classList.remove("hidden");
-    inbox.innerHTML =
-      "<div class=\"request-inbox-head\">" +
-      "<strong>" + t("bk.newRequests", "Новые заявки на приём") + "</strong>" +
-      "<span class=\"req-badge\">" + list.length + "</span>" +
-      "</div>";
-
-    list.forEach(function (req) {
-      var free = suggestedKennelsFor(req);
-      var freeLabels = free.slice(0, 4).map(function (k) { return k.label; }).join(", ");
-      var card = document.createElement("article");
-      card.className = "request-card";
-      card.innerHTML =
-        "<div class=\"request-card-main\">" +
-        (req.petPhoto ? "<img class=\"request-thumb\" src=\"" + req.petPhoto + "\" alt=\"\">" : "") +
-        "<div class=\"request-card-body\">" +
-        "<header>" +
-        "<strong>" + (req.petName || t("bk.noPet", "Без клички")) + " · " + sizeLabel(req.size) + "</strong>" +
-        "<span class=\"status-pill is-" + req.status + "\">" + statusLabel(req.status) + "</span>" +
-        "</header>" +
-        "<div class=\"meta\">" + formatDMY(req.dateIn) + " → " + formatDMY(req.dateOut) +
-        " · " + (req.nights || daysBetween(req.dateIn, req.dateOut)) + " " + t("bk.nightsShort", "сут.") +
-        (state.isAdmin ? " · ~" + money(req.total || 0) : "") + "</div>" +
-        "<div class=\"meta\">" + (req.ownerName || "—") + " · " + (req.ownerPhone || t("bk.noPhone", "без телефона")) + "</div>" +
-        (petProfileLine(req) ? "<div class=\"meta\">" + petProfileLine(req) + "</div>" : "") +
-        (req.notes ? "<div class=\"meta request-notes\">" + req.notes + "</div>" : "") +
-        "<div class=\"meta request-suggest\">" +
-        (free.length
-          ? t("bk.canPlace", "Можно разместить") + ": " + freeLabels + (free.length > 4 ? "…" : "")
-          : t("bk.noFreeShort", "свободных вольеров нет")) +
-        "</div>" +
-        requestStatusSelectHtml(req.status) +
-        "</div></div>" +
-        "<div class=\"card-actions\">" +
-        "<button type=\"button\" class=\"btn btn-sm\" data-req=\"place\">" +
-        (free.length
-          ? t("bk.placeIn", "В вольер") + " " + free[0].label
-          : t("bk.toForm", "В форму")) +
-        "</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"form\">" + t("bk.toForm", "В форму") + "</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"wa\">WhatsApp</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"reject\">" + t("bk.actReject", "Отклонить") + "</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"delete\">" + t("bk.actDelete", "Удалить") + "</button>" +
-        "</div>";
-      bindRequestCardActions(card, req, free);
-      inbox.appendChild(card);
-    });
-  }
-
   function renderBookings() {
     var root = $("#bookingList");
     if (!root || !state.isAdmin) return;
-    renderRequestInbox();
     var list = filteredBookingList();
-    var nonRequest = state.bookings.filter(function (b) { return b.status !== "request"; });
-    if (!nonRequest.length && state.listStatus !== "request") {
+    if (!state.bookings.length) {
       root.innerHTML = "<p class=\"booking-hint\">" + t("bk.noBookings", "Пока нет броней.") + "</p>";
       return;
     }
@@ -1522,7 +1282,7 @@
     root.innerHTML = "";
     list.forEach(function (b) {
       var card = document.createElement("article");
-      card.className = "booking-card" + (b.status === "request" ? " is-request" : "");
+      card.className = "booking-card";
       var titleRight = b.kennelId || "—";
       card.innerHTML =
         "<header><strong>" + (b.petName || t("bk.noPet", "Без клички")) + " · " + titleRight + "</strong>" +
@@ -1530,34 +1290,31 @@
         "<div class=\"meta\">" + formatDMY(b.dateIn) + " → " + formatDMY(b.dateOut) + " · " + money(b.total || 0) + "</div>" +
         "<div class=\"meta\">" + (b.ownerName ? b.ownerName + " · " : "") + (b.ownerPhone || t("bk.noPhone", "без телефона")) + "</div>" +
         "<div class=\"card-actions\">" +
-        (b.status === "request"
-          ? "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"form\">" + t("bk.toForm", "В форму") + "</button>" +
-            "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"reject\">" + t("bk.actReject", "Отклонить") + "</button>"
-          : "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"checkedin\">" + t("bk.actIn", "Заселить") + "</button>" +
-            "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"checkedout\">" + t("bk.actOut", "Выезд") + "</button>" +
-            "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"cancelled\">" + t("bk.actCancel", "Отменить") + "</button>" +
-            ((b.status === "checkedin" || b.status === "pending")
-              ? "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"vet\">" + t("bk.addVet", "Добавить вызов") + "</button>" +
-                "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"doc\">" + t("bk.print", "Печать") + "</button>"
-              : "")) +
+        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"form\">" + t("bk.toForm", "В форму") + "</button>" +
+        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"checkedin\">" + t("bk.actIn", "Заселить") + "</button>" +
+        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"checkedout\">" + t("bk.actOut", "Выезд") + "</button>" +
+        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"cancelled\">" + t("bk.actCancel", "Отменить") + "</button>" +
+        ((b.status === "checkedin" || b.status === "pending")
+          ? "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"vet\">" + t("bk.addVet", "Добавить вызов") + "</button>" +
+            "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"doc\">" + t("bk.print", "Печать") + "</button>"
+          : "") +
+        (b.ownerPhone
+          ? "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"wa\">WhatsApp</button>"
+          : "") +
         "<button type=\"button\" class=\"btn btn-line btn-sm\" data-act=\"delete\">" + t("bk.actDelete", "Удалить") + "</button>" +
         "</div>";
       card.querySelectorAll("[data-act]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var act = btn.getAttribute("data-act");
           if (act === "delete") {
-            if (b.status === "request") {
-              deleteRequest(b);
-              return;
-            }
             if (!window.confirm(t("bk.confirmDelete", "Удалить эту бронь без возможности восстановления?"))) return;
             rememberDeletedId(b.id);
             state.bookings = state.bookings.filter(function (x) { return x.id !== b.id; });
           } else if (act === "form") {
-            fillFormFromRequest(b);
+            fillFormFromBooking(b);
             return;
-          } else if (act === "reject") {
-            rejectRequest(b);
+          } else if (act === "wa") {
+            openWhatsApp(b.ownerPhone, t("bk.waAsk", "Здравствуйте! Это Kennel Booking по вашей брони на") + " " + (b.petName || "") + ".");
             return;
           } else if (act === "vet") {
             openVetDialog(b.id);
@@ -2100,23 +1857,13 @@
 
   function updateNotifUi() {
     var unread = unreadNotifCount();
-    var reqCount = newRequests().length;
     var notifEl = $("#notifCount");
     if (notifEl) {
-      if (unread + reqCount > 0 && state.isAdmin) {
-        notifEl.textContent = String(unread + reqCount);
+      if (unread > 0 && state.isAdmin) {
+        notifEl.textContent = String(unread);
         notifEl.classList.remove("hidden");
       } else {
         notifEl.classList.add("hidden");
-      }
-    }
-    var badge = $("#requestBadge");
-    if (badge) {
-      if (reqCount > 0 && state.isAdmin) {
-        badge.textContent = String(reqCount);
-        badge.classList.remove("hidden");
-      } else {
-        badge.classList.add("hidden");
       }
     }
   }
@@ -2143,38 +1890,11 @@
     if (!root) return;
     ensureReminderNotifications();
     updateNotifUi();
-    var openList = openRequests();
-    if (!state.notifications.length && !openList.length) {
+    if (!state.notifications.length) {
       root.innerHTML = "<p class=\"booking-hint\">" + t("bk.noNotifs", "Пока нет оповещений.") + "</p>";
       return;
     }
     root.innerHTML = "";
-
-    openList.forEach(function (req) {
-      var free = suggestedKennelsFor(req);
-      var card = document.createElement("article");
-      card.className = "notif-item is-unread is-request";
-      card.innerHTML =
-        "<header><strong>" + t("bk.newRequestAlert", "Новая заявка на приём собаки!") + "</strong>" +
-        "<span class=\"status-pill is-" + req.status + "\">" + statusLabel(req.status) + "</span></header>" +
-        "<div class=\"meta\">" + (req.petName || "") + " · " + sizeLabel(req.size) + " · " +
-        formatDMY(req.dateIn) + " → " + formatDMY(req.dateOut) + "</div>" +
-        (petProfileLine(req) ? "<div class=\"meta\">" + petProfileLine(req) + "</div>" : "") +
-        "<div class=\"meta\">" + (req.ownerName || "") + " · " + (req.ownerPhone || "") + "</div>" +
-        requestStatusSelectHtml(req.status) +
-        "<div class=\"card-actions\">" +
-        "<button type=\"button\" class=\"btn btn-sm\" data-jump=\"1\">" + t("bk.toForm", "В форму") + "</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"wa\">WhatsApp</button>" +
-        "<button type=\"button\" class=\"btn btn-line btn-sm\" data-req=\"delete\">" + t("bk.actDelete", "Удалить") + "</button>" +
-        "</div>";
-      card.querySelector("[data-jump]").addEventListener("click", function () {
-        fillFormFromRequest(req);
-        var dlg = $("#notifDialog");
-        if (dlg && dlg.open && typeof dlg.close === "function") dlg.close();
-      });
-      bindRequestCardActions(card, req, free);
-      root.appendChild(card);
-    });
 
     state.notifications.forEach(function (n) {
       var card = document.createElement("article");
@@ -2186,11 +1906,9 @@
         "<span class=\"meta\">" + formatDMY(n.at.slice(0, 10)) + "</span></header>" +
         "<div class=\"meta\">" + (n.body || "") + "</div>" +
         (profile ? "<div class=\"meta\">" + profile + "</div>" : "") +
-        (linked && isOpenRequest(linked) ? requestStatusSelectHtml(linked.status) : "") +
         "<div class=\"card-actions\">" +
         "<button type=\"button\" class=\"btn btn-line btn-sm\" data-del-notif=\"1\">" + t("bk.actDelete", "Удалить") + "</button>" +
         "</div>";
-      if (linked && isOpenRequest(linked)) bindRequestCardActions(card, linked, suggestedKennelsFor(linked));
       card.querySelector("[data-del-notif]").addEventListener("click", function () {
         deleteNotificationById(n.id);
       });
@@ -2240,7 +1958,6 @@
     list.forEach(function (b) {
       var card = document.createElement("article");
       card.className = "booking-card";
-      var isReq = isOpenRequest(b) || b.status === "done" || b.status === "rejected" || b.status === "request";
       card.innerHTML =
         "<header><strong>" + (b.petName || t("bk.noPet", "Без клички")) +
         (b.kennelId ? " · " + b.kennelId : "") + "</strong>" +
@@ -2251,33 +1968,25 @@
         "<div class=\"meta\">" + (b.ownerName ? b.ownerName + " · " : "") + (b.ownerPhone || t("bk.noPhone", "без телефона")) + "</div>" +
         (petProfileLine(b) ? "<div class=\"meta\">" + petProfileLine(b) + "</div>" : "") +
         (b.notes ? "<div class=\"meta\">" + b.notes + "</div>" : "") +
-        (isReq || isOpenRequest(b) ? requestStatusSelectHtml(b.status) : "") +
         "<div class=\"card-actions\">" +
         "<button type=\"button\" class=\"btn btn-line btn-sm\" data-hist=\"form\">" + t("bk.toForm", "В форму") + "</button>" +
         (b.ownerPhone ? "<button type=\"button\" class=\"btn btn-line btn-sm\" data-hist=\"wa\">WhatsApp</button>" : "") +
         "<button type=\"button\" class=\"btn btn-line btn-sm\" data-hist=\"delete\">" + t("bk.actDelete", "Удалить") + "</button>" +
         "</div>";
-      if (isReq || isOpenRequest(b) || b.status === "done" || b.status === "rejected") {
-        bindRequestCardActions(card, b, suggestedKennelsFor(b));
-      }
       card.querySelectorAll("[data-hist]").forEach(function (btn) {
         btn.addEventListener("click", function () {
           var act = btn.getAttribute("data-hist");
           if (act === "form") {
-            fillFormFromRequest(b);
+            fillFormFromBooking(b);
             var dlg = $("#historyDialog");
             if (dlg && dlg.open && typeof dlg.close === "function") dlg.close();
           } else if (act === "wa") {
-            openWhatsApp(b.ownerPhone, t("bk.waAsk", "Здравствуйте! Это по вашей заявке на") + " " + (b.petName || "") + ".");
+            openWhatsApp(b.ownerPhone, t("bk.waAsk", "Здравствуйте! Это Kennel Booking по вашей брони на") + " " + (b.petName || "") + ".");
           } else if (act === "delete") {
-            if (isOpenRequest(b) || b.status === "request" || b.status === "done" || b.status === "rejected") {
-              deleteRequest(b);
-            } else {
-              if (!window.confirm(t("bk.confirmDelete", "Удалить эту бронь без возможности восстановления?"))) return;
-              rememberDeletedId(b.id);
-              state.bookings = state.bookings.filter(function (x) { return x.id !== b.id; });
-              saveBookings();
-            }
+            if (!window.confirm(t("bk.confirmDelete", "Удалить эту бронь без возможности восстановления?"))) return;
+            rememberDeletedId(b.id);
+            state.bookings = state.bookings.filter(function (x) { return x.id !== b.id; });
+            saveBookings();
             renderHistoryList();
             renderBookings();
             updateNotifUi();
@@ -2454,110 +2163,6 @@
     renderKennelMiniCal();
   }
 
-  function sendPublicRequest() {
-    var common = validateCommonFields();
-    if (!common.ok) return formMessage(common.message, "error");
-
-    var age = readPetAge();
-    if (!age.filled) {
-      markInvalid("[data-field='petAge']", "errGuest", t("bk.errAge", "Укажите возраст собаки."));
-      return formMessage(t("bk.errAge", "Укажите возраст собаки."), "error");
-    }
-    if (age.totalMonths < 6) {
-      markInvalid("[data-field='petAge']", "errGuest", t("bk.errTooYoung", "Не принимаем младше 6 месяцев."));
-      return formMessage(
-        t("bk.errTooYoungFull", "К сожалению, не можем принять собаку младше 6 месяцев, а также без прививок и без ветпаспорта."),
-        "error"
-      );
-    }
-
-    var docs = $("#docsConfirm");
-    if (!docs || !docs.checked) {
-      markInvalid("[data-field='docsConfirm']", "errGuest", t("bk.errDocs", "Нужно подтвердить ветпаспорт и прививки."));
-      return formMessage(
-        t("bk.errDocsFull", "Не принимаем без ветпаспорта и без действующих прививок. Также не принимаем младше 6 месяцев."),
-        "error"
-      );
-    }
-
-    var food = currentFoodSelection();
-    var price = calcPrice({
-      size: state.size,
-      dateIn: common.dateIn,
-      dateOut: common.dateOut,
-      foodPrice: food.price,
-      foodName: food.name,
-      aggressive: false,
-      vetVisits: []
-    });
-    var comment = ($("#publicNotes").value || "").trim();
-    var free = freeKennels(state.size, common.dateIn, common.dateOut);
-    var breed = ($("#breed") && $("#breed").value || "").trim();
-    var weight = ($("#weight") && $("#weight").value || "").trim();
-    var ageLabel = formatPetAge(age.years, age.months);
-    var request = {
-      id: uid(),
-      createdAt: new Date().toISOString(),
-      status: "request",
-      source: "public",
-      size: state.size,
-      kennelId: null,
-      dateIn: common.dateIn,
-      dateOut: common.dateOut,
-      nights: price.nights,
-      petName: common.petName,
-      breed: breed,
-      weight: weight,
-      ageYears: age.years,
-      ageMonths: age.months,
-      ageLabel: ageLabel,
-      ownerName: common.ownerName,
-      ownerPhone: common.phone,
-      foodOptionId: food.id,
-      foodName: food.name,
-      foodPrice: food.price,
-      hotelFood: !!food.id,
-      aggressive: false,
-      docsConfirmed: true,
-      notes: comment,
-      petPhoto: state.petPhotoData || "",
-      vetVisits: [],
-      total: price.total,
-      priceBreakdown: price,
-      suggestedKennels: free.map(function (k) { return k.id; })
-    };
-    state.bookings.push(request);
-    saveBookings();
-    pushNotification({
-      type: "request",
-      title: t("bk.newRequestAlert", "Новая заявка на приём собаки!"),
-      body: request.petName + " · " + sizeLabel(request.size) + " · " +
-        (breed || "—") + " · " + (weight ? weight + " кг" : "—") + " · " + (ageLabel || "—") + " · " +
-        formatDMY(request.dateIn) + "–" + formatDMY(request.dateOut) + " · " + request.ownerPhone,
-      bookingId: request.id
-    });
-    formMessage(t("bk.requestSaved", "Заявка сохранена для персонала."), "ok");
-
-    $("#petName").value = "";
-    if ($("#breed")) $("#breed").value = "";
-    if ($("#weight")) $("#weight").value = "";
-    if ($("#petAgeYears")) $("#petAgeYears").value = "";
-    if ($("#petAgeMonths")) $("#petAgeMonths").value = "";
-    $("#ownerName").value = "";
-    $("#ownerPhone").value = "";
-    if ($("#publicNotes")) $("#publicNotes").value = "";
-    if ($("#docsConfirm")) $("#docsConfirm").checked = false;
-    state.petPhotoData = "";
-    state.foodOptionId = "";
-    var preview = $("#petPhotoPreview");
-    if (preview) { preview.classList.add("hidden"); preview.innerHTML = ""; }
-    if ($("#petPhoto")) $("#petPhoto").value = "";
-    if ($("#petPhotoCamera")) $("#petPhotoCamera").value = "";
-    renderFoodOptions();
-    updatePrice();
-    if (typeof updatePublicAvailability === "function") updatePublicAvailability();
-  }
-
   function exportBookings() {
     var blob = new Blob([JSON.stringify({
       exportedAt: new Date().toISOString(),
@@ -2583,6 +2188,9 @@
           if (data.settings) state.settings = normalizeSettings(data.settings);
           if (Array.isArray(data.notifications)) state.notifications = data.notifications;
         }
+        state.bookings = (state.bookings || []).filter(function (b) {
+          return b && !isLegacyRequestStatus(b.status);
+        });
         saveBookings();
         saveSettings();
         saveNotifications();
@@ -2648,13 +2256,8 @@
     updatePrice();
     renderKennelMiniCal();
     if (window.ZH && typeof window.ZH.apply === "function") window.ZH.apply(window.ZH.current());
-    var reqCount = newRequests().length;
-    formMessage(
-      t("bk.adminOn", "Режим персонала включён.") +
-      (reqCount ? " " + t("bk.newRequests", "Новые заявки на приём") + ": " + reqCount : ""),
-      "ok"
-    );
-    if (reqCount || unreadNotifCount()) openNotifDialog();
+    formMessage(t("bk.adminOn", "Режим персонала включён."), "ok");
+    if (unreadNotifCount()) openNotifDialog();
   }
 
   function leaveAdmin() {
@@ -2709,7 +2312,6 @@
     var aggressive = $("#aggressive");
     if (aggressive) aggressive.addEventListener("change", updatePrice);
     $("#saveBooking").addEventListener("click", validateAndSave);
-    if ($("#sendRequest")) $("#sendRequest").addEventListener("click", sendPublicRequest);
     $("#findNearest").addEventListener("click", showNearest);
     $("#saveSettings").addEventListener("click", function () {
       readSettingsForm();
@@ -2914,7 +2516,7 @@
       });
     });
 
-    // Same-browser sync: public tab → admin tab
+    // Same-browser sync across tabs
     window.addEventListener("storage", function (event) {
       if (event.key !== STORAGE_KEY && event.key !== NOTIFY_KEY) return;
       loadState();
@@ -2924,19 +2526,14 @@
         updateNotifUi();
         updateAvailability();
         renderKennelMiniCal();
-        if (newRequests().length) {
-          formMessage(t("bk.newRequestAlert", "Новая заявка на приём собаки!"), "ok");
-        }
       }
     });
 
-    // Keep admin inbox fresh if another tab wrote requests
     setInterval(function () {
       if (!state.isAdmin) return;
       var prev = state.bookings.length;
-      var prevReq = newRequests().length;
       loadState();
-      if (state.bookings.length !== prev || newRequests().length !== prevReq) {
+      if (state.bookings.length !== prev) {
         renderBookings();
         updateNotifUi();
         updateAvailability();
